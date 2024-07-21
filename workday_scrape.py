@@ -9,6 +9,8 @@ from webdriver_manager.chrome import ChromeDriverManager
 import csv
 import time
 from colorama import Fore, Back, Style, init
+import argparse
+from datetime import datetime, timezone
 
 # Initialize colorama
 init(autoreset=True)
@@ -91,14 +93,14 @@ def filter_us_jobs(driver):
         driver.execute_script("arguments[0].click();", view_jobs_button)
 
         # Wait for the page to update
-        time.sleep(10)
+        time.sleep(3)
         debug_print("US jobs filter applied successfully.", Fore.GREEN)
         return True
     except Exception as e:
         debug_print(f"Error applying US jobs filter: {str(e)}", Fore.RED)
         return False
 
-def scrape_workday_jobs(url, max_retries=3):
+def scrape_workday_jobs(url, max_pages=None, max_retries=3):
     driver = None
     for attempt in range(max_retries):
         try:
@@ -121,12 +123,13 @@ def scrape_workday_jobs(url, max_retries=3):
             
             jobs = []
             processed_job_ids = set()
+            scrape_timestamp = datetime.now(timezone.utc).isoformat()
             
             for page in range(1, total_pages + 1):
                 debug_print(f"Scraping page {page} of {total_pages}...", Fore.MAGENTA)
                 
                 # Wait for job listings to load
-                WebDriverWait(driver, 30).until(
+                WebDriverWait(driver, 3).until(
                     EC.presence_of_all_elements_located((By.CSS_SELECTOR, "li.css-1q2dra3"))
                 )
                 
@@ -136,7 +139,8 @@ def scrape_workday_jobs(url, max_retries=3):
                         title: el.querySelector('a[data-automation-id="jobTitle"]')?.textContent,
                         url: el.querySelector('a[data-automation-id="jobTitle"]')?.href,
                         location: el.querySelector('dd.css-129m7dg')?.textContent,
-                        job_id: el.querySelector('li.css-h2nt8k')?.textContent
+                        job_id: el.querySelector('li.css-h2nt8k')?.textContent,
+                        scrape_timestamp: '""" + scrape_timestamp + """'
                     }));
                 """)
                 
@@ -153,6 +157,10 @@ def scrape_workday_jobs(url, max_retries=3):
                 
                 if new_jobs_on_page == 0 and page > 1:
                     debug_print("No new jobs on this page. Ending scrape.", Fore.YELLOW)
+                    break
+                
+                if max_pages and page >= max_pages:
+                    debug_print(f"Reached specified maximum of {max_pages} pages. Ending scrape.", Fore.YELLOW)
                     break
                 
                 if page < total_pages:
@@ -183,7 +191,7 @@ def scrape_workday_jobs(url, max_retries=3):
                                 driver.execute_script("arguments[0].click();", next_button)
                                 debug_print("Clicked 'next' button", Fore.GREEN)
 
-                                time.sleep(10)  # Wait for the page to load
+                                time.sleep(3)  # Wait for the page to load
                                 
                                 # Check if new jobs are loaded
                                 new_job_elements = driver.execute_script("""
@@ -205,13 +213,6 @@ def scrape_workday_jobs(url, max_retries=3):
                                 if retry == max_retries - 1:
                                     raise  # Re-raise the exception if all retries failed
                                 time.sleep(2)  # Wait before retrying
-                        
-                    except TimeoutException:
-                        debug_print("Timeout: Couldn't find next button or it's not clickable. Ending scrape.", Fore.YELLOW)
-                        break
-                    except Exception as e:
-                        debug_print(f"Unhandled error during pagination: {str(e)}", Fore.RED)
-                        break
                         
                     except TimeoutException:
                         debug_print("Timeout: Couldn't find next button or it's not clickable. Ending scrape.", Fore.YELLOW)
@@ -241,16 +242,20 @@ def scrape_workday_jobs(url, max_retries=3):
 def save_to_csv(jobs, filename='nvidia_us_jobs.csv'):
     debug_print(f"Saving {len(jobs)} jobs to {filename}...", Fore.YELLOW)
     with open(filename, 'w', newline='', encoding='utf-8') as file:
-        writer = csv.DictWriter(file, fieldnames=['title', 'location', 'job_id', 'url'])
+        writer = csv.DictWriter(file, fieldnames=['title', 'location', 'job_id', 'url', 'scrape_timestamp'])
         writer.writeheader()
         for job in jobs:
             writer.writerow(job)
     debug_print(f"Jobs saved successfully to {filename}", Fore.GREEN)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Scrape job listings from NVIDIA's Workday site.")
+    parser.add_argument("-p", "--pages", type=int, help="Maximum number of pages to scrape")
+    args = parser.parse_args()
+
     url = "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite"
     debug_print("Starting the job scraping process...", Fore.CYAN)
-    jobs = scrape_workday_jobs(url)
+    jobs = scrape_workday_jobs(url, max_pages=args.pages)
     
     if jobs:
         debug_print(f"Found {len(jobs)} job listings.", Fore.GREEN)

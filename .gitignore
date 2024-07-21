@@ -1,0 +1,42 @@
+# Conda environment
+/envs/
+*.conda
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Data files
+*.csv
+*.pkl
+
+# Environment variables
+.env
+
+# macOS specific files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+
+# Keep existing entries
+ex.txt
+jobs.csv
+job_postings.csv
+job_ids_dict.pkl
